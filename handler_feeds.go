@@ -39,7 +39,13 @@ func (cfg *apiConfig) handlerFeedsCreate(w http.ResponseWriter, r *http.Request,
 		respondWithError(w, http.StatusInternalServerError, "Could not create feed")
 		return
 	}
-	ff, err := cfg.createFeedFollow(r, dbUser, feed.ID)
+	ff, err := cfg.DB.CreateFeedFollow(r.Context(), database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		UserID:    dbUser.ID,
+		FeedID:    feed.ID,
+		Createdat: time.Now(),
+		Updatedat: time.Now(),
+	})
 	if err != nil {
 		log.Printf("Could not create feed follow after creating feed: %q", err)
 		respondWithError(w, http.StatusInternalServerError, "Could not create feed")
@@ -89,7 +95,13 @@ func (cfg *apiConfig) handlerFeedFollowCreate(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	ff, err := cfg.createFeedFollow(r, dbUser, parsedUuid)
+	ff, err := cfg.DB.CreateFeedFollow(r.Context(), database.CreateFeedFollowParams{
+		ID:        uuid.New(),
+		UserID:    dbUser.ID,
+		FeedID:    parsedUuid,
+		Createdat: time.Now(),
+		Updatedat: time.Now(),
+	})
 	if err != nil {
 		log.Printf("Could not create feed follow: %q", err)
 		respondWithError(w, http.StatusInternalServerError, "Could not create feed follow")
@@ -145,14 +157,4 @@ func (cfg *apiConfig) handlerFFByUser(w http.ResponseWriter, r *http.Request, db
 
 	log.Printf("Returning %d feed follows for user id %s", len(ffResponse), dbUser.ID)
 	respondWithJSON(w, http.StatusOK, ffResponse)
-}
-
-func (cfg *apiConfig) createFeedFollow(r *http.Request, dbUser *database.User, parsedUuid uuid.UUID) (database.FeedFollow, error) {
-	return cfg.DB.CreateFeedFollow(r.Context(), database.CreateFeedFollowParams{
-		ID:        uuid.New(),
-		UserID:    dbUser.ID,
-		FeedID:    parsedUuid,
-		Createdat: time.Now(),
-		Updatedat: time.Now(),
-	})
 }
