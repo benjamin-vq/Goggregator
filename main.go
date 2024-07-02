@@ -22,6 +22,7 @@ const (
 	createFeedFollowPath = "POST /v1/feed_follows"
 	deleteFeedFollowPath = "DELETE /v1/feed_follows/{feedFollowID}"
 	getAllFFByUserPath   = "GET /v1/feed_follows"
+	getPostsByUserPath   = "GET /v1/posts"
 )
 
 type apiConfig struct {
@@ -65,6 +66,7 @@ func main() {
 	mux.HandleFunc(createFeedFollowPath, cfg.authMiddleware(cfg.handlerFeedFollowCreate))
 	mux.HandleFunc(deleteFeedFollowPath, cfg.authMiddleware(cfg.handlerFeedFollowDelete))
 	mux.HandleFunc(getAllFFByUserPath, cfg.authMiddleware(cfg.handlerFFByUser))
+	mux.HandleFunc(getPostsByUserPath, cfg.authMiddleware(cfg.handlerGetPostsByUser))
 
 	log.Printf("Starting server on port :%s", port)
 	log.Fatal(server.ListenAndServe())

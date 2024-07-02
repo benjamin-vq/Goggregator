@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/benjamin-vq/goggregator/internal/database"
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"io"
 	"log"
 	"net/http"
@@ -28,14 +29,14 @@ func (cfg *apiConfig) feedRequests(limit int32) {
 	feeds, err := cfg.DB.GetNextFeedsToFetch(context.Background(), limit)
 	if err != nil {
 		log.Printf("Could not query next feeds to fetch: %q", err)
+		return
 	}
 	assert(int32(len(feeds)) == limit, "Feeds length and feeds limit do not match")
 	var wg sync.WaitGroup
 
 	responses := make(chan FeedRss, len(feeds))
-	for i, feed := range feeds {
+	for _, feed := range feeds {
 		wg.Add(1)
-		log.Printf("Fetching feed number %d in goroutine", i)
 		go func(feedUrl string, feedId uuid.UUID) {
 
 			defer wg.Done()
@@ -45,22 +46,46 @@ func (cfg *apiConfig) feedRequests(limit int32) {
 					feedUrl, err)
 				return
 			}
-			log.Println("Putting processed RSS response in channel")
 			responses <- FeedRss{FeedId: feedId, Rss: rss}
 		}(feed.Url, feed.ID)
 	}
 
-	log.Println("Waiting on work group")
 	wg.Wait()
-	log.Println("Work group finished, closing channel")
 	close(responses)
 
-	log.Println("Processing channel elements")
 	for feedRss := range responses {
 		cfg.markAsFetched(feedRss)
-		log.Printf("Posts fetched from %s:", feedRss.Channel.Title)
 		for _, posts := range feedRss.Channel.Item {
-			log.Print(posts.Title)
+			parsedTime, err := time.Parse("Mon, 02 Jan 2006 15:04:05 -0700", posts.PubDate)
+			if err != nil {
+				log.Printf("Could not parse publish date of post %s: %q",
+					posts.Title, err)
+				continue
+			}
+			// TODO: Batch insert
+			err = cfg.DB.CreatePost(context.Background(), database.CreatePostParams{
+				ID:          uuid.New(),
+				Title:       posts.Title,
+				Url:         posts.Link,
+				Description: sql.NullString{String: posts.Description, Valid: true},
+				Publishedat: sql.NullTime{Time: parsedTime, Valid: true},
+				FeedID:      feedRss.FeedId,
+				Createdat:   time.Now(),
+				Updatedat:   time.Now(),
+			})
+			if err != nil {
+				var pqerr *pq.Error
+				if errors.As(err, &pqerr) && pqerr.Code == "23505" {
+					//log.Printf("Post with title %s already exists in database.",
+					//	posts.Title)
+					continue
+				}
+				log.Printf("Could not create post titled %s: %q (error type: %T)",
+					posts.Title, err, err)
+			} else {
+				log.Printf("Successfully created post titled %s in database",
+					posts.Title)
+			}
 		}
 	}
 	log.Printf("All %d RSS feeds processed.", len(feeds))
@@ -85,9 +110,7 @@ func (cfg *apiConfig) markAsFetched(feedRss FeedRss) {
 }
 
 func fetchFeed(url string) (Rss, error) {
-	log.Printf("Making a GET request to feed: %s", url)
 	res, err := http.Get(url)
-	log.Printf("Call to feed url %s finished", url)
 	if err != nil {
 		log.Printf("Error during GET request: %q", err)
 		return Rss{}, err
