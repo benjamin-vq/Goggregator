@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 )
 
 const (
@@ -30,6 +32,8 @@ func main() {
 	setup()
 	port := os.Getenv("PORT")
 	dbUrl := os.Getenv("DB")
+	fetchTickString := os.Getenv("FETCH_EVERY")
+	feedLimitString := os.Getenv("FEEDS_AMOUNT")
 
 	db, err := sql.Open("postgres", dbUrl)
 	if err != nil {
@@ -40,6 +44,9 @@ func main() {
 	cfg := apiConfig{
 		DB: dbQueries,
 	}
+
+	fetchTick, feedLimit := parseArgs(fetchTickString, feedLimitString)
+	go cfg.fetchLeastUpdatedFeeds(time.Duration(fetchTick)*time.Second, int32(feedLimit))
 
 	mux := http.NewServeMux()
 	server := http.Server{
@@ -70,4 +77,21 @@ func setup() {
 	if err != nil {
 		log.Fatalf("Could not load environment variables: %q", err)
 	}
+}
+
+func parseArgs(fetchTickString, feedLimitString string) (fetchTick, feedLimit int) {
+
+	fetchTick, err := strconv.Atoi(fetchTickString)
+	if err != nil {
+		log.Fatalf("Invalid fetch tick environment variable: %s, exiting.",
+			fetchTickString)
+	}
+
+	feedLimit, err = strconv.Atoi(feedLimitString)
+	if err != nil {
+		log.Fatalf("Invalid feed limit environment variable: %s, exiting.",
+			feedLimitString)
+	}
+
+	return fetchTick, feedLimit
 }

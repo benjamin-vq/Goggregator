@@ -19,3 +19,13 @@ RETURNING *;
 -- name: GetFeedFollowsByUser :many
 SELECT * FROM feed_follows
 WHERE user_id = $1;
+
+-- name: GetNextFeedsToFetch :many
+SELECT * FROM feeds
+ORDER BY lastfetchedat NULLS FIRST
+LIMIT $1;
+
+-- name: MarkFeedFetched :exec
+UPDATE feeds
+SET lastfetchedat = $1, updatedat = $2
+WHERE feeds.id = $3;
